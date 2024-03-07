@@ -1,0 +1,580 @@
+// Import necessary modules
+const express = require('express');
+const bodyParser = require('body-parser');
+const app = express();
+const mysql = require('mysql'); 
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+
+const PORT = 3000;
+
+// Middleware to parse incoming JSON requests
+app.use(bodyParser.json());
+
+
+
+// Define your database connection configuration
+const dbConfig = {
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'healthcare',
+};
+
+// Create a connection pool
+const db = mysql.createPool(dbConfig);
+
+
+// healthcare registration
+app.post('/doctor/registeration', (req, res) => {
+  const { full_name, gender, date_of_birth, phone_number, email_address, registration_number, address, registration_date, place_of_work } = req.body;
+  if (!full_name || !gender  || !date_of_birth || !phone_number ||!email_address ||!registration_number ||!address  ||!registration_date ||!place_of_work) {
+    return res.status(400).json({ error: 'Please provide full_name, gender, date_of_birth, phone_number, email_address, registration_number, address, registration_date, place_of_work' });
+  }
+
+  // Inserting user data into database
+  const sql = 'INSERT INTO healthcare_registration  (full_name, gender, date_of_birth, phone_number, email_address, registration_number, address, registration_date, place_of_work) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  db.query(sql, [full_name, gender, date_of_birth, phone_number, email_address, registration_number, address, registration_date, place_of_work], (err, result) => {
+    if (err) {
+      console.error('Error registering user:', err);
+      return res.status(500).json({ error: 'An error occurred while registering ' });
+    }
+    console.log('User registered successfully');
+    return res.status(200).json({ reasponse: "200" , success: "true", message: ' registered healthcare professional successfully' });
+  });
+});
+
+
+
+// fetch professinal details
+app.get('/fetch/doctor/details/:id', (req, res) => {
+  const id = req.params.id; // Assuming the user's ID is part of the URL parameters
+  const sql = 'SELECT * FROM healthcare_registration WHERE id = ?'; // Adjust the table name and condition accordingly
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error('Error fetching details:', err);
+      return res.status(500).json({ error: 'Fetching healthcare professional details failed' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User details not found' });
+    }
+   
+    return res.status(200).json({reasponse: "200" , success: "true",  message: 'fetch Healthcare professional details' , results });
+  });
+});
+
+
+
+
+// create the update healthcare details
+app.put('/doctor/update/:id', (req, res) => {
+  const registrationId = req.params.id;
+  const {full_name, gender, date_of_birth, phone_number, email_address, registration_number, address, registration_date, place_of_work} = req.body;
+  
+  // Check if all required fields are provided
+  if (!full_name || !gender ||!date_of_birth  || !phone_number ||!email_address ||!registration_number  ||!address ||!registration_date ||!place_of_work) {
+    return res.status(400).json({ error: 'Please provide full_name, gender, date_of_birth ,phone_number, email_address, registration_number,  address, registration_date, place_of_work' });
+  }
+
+  // Updating user data in the database
+  const sql = 'UPDATE healthcare_registration SET full_name=?, gender=?, date_of_birth=? ,  phone_number=?, email_address=?, registration_number=?,  address=? ,registration_date=?, place_of_work=? WHERE id=?';
+  db.query(sql, [full_name, gender, date_of_birth, phone_number, email_address, registration_number, address,registration_date, place_of_work, registrationId], (err, result) => {
+    if (err) {
+      console.error('Error updating user:', err);
+      return res.status(500).json({ error: 'An error occurred while updating' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Healthcare professional not found' });
+    }
+    console.log('Healthcare professional updated successfully');
+    return res.status(200).json({reasponse: "200" , success: "true",  message: 'Healthcare professional updated successfully' });
+  });
+});
+
+
+// healthcare delete api
+app.delete('/healthcare/delete/doctor/:id', (req, res) => {
+  const registrationId = req.params.id;                     
+
+  // Deleting user data from the database
+  const sql = 'DELETE FROM healthcare_registration WHERE id = ?';
+  db.query(sql, [registrationId], (err, result) => {
+    if (err) {
+      console.error('Error deleting user:', err);
+      return res.status(500).json({ error: 'An error occurred while deleting' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Healthcare professional not found' });
+    }
+    console.log('Healthcare professional deleted successfully');
+    return res.status(200).json({reasponse: "200" , success: "true",  message: 'Healthcare professional deleted successfully' });
+  });
+});
+
+
+// notification
+let notifications = [];
+app.post('/create/notifications', (req, res) => {
+  const { notification_id, user_id, message, read } = req.body;
+
+  // Check if required fields are provided
+  if (!notification_id  ||!user_id || !message || read === undefined) {
+      return res.status(400).json({ error: 'Please provide notification_id,  user_id, message, and read' });
+  }
+  const timestamp = new Date().toISOString();
+  // Insert notification into the database
+  const insertQuery = 'INSERT INTO notifications (notification_id, user_id, message, `read`, timestamp) VALUES (?, ?, ?, ?, ?)';
+  db.query(insertQuery, [notification_id, user_id, message, read, timestamp], (err, result) => {
+      if (err) {
+          console.error('Error inserting notification:', err);
+          return res.status(500).json({ error: 'An error occurred while storing the notification' });
+      }
+      // Respond with the inserted notification
+      const notification = {
+          id: result.insertId,
+          notification_id,
+          message,
+          read,
+          timestamp
+      };
+      return res.status(201).json(notification);
+  });
+});
+
+
+
+
+
+
+
+
+// create help center query
+app.post('/help-center/tickets', (req, res) => {
+  const { subject, message } = req.body;
+
+  if (!subject || !message) {
+      return res.status(400).json({ error: 'Please provide a subject and message' });
+  }
+
+  const insertQuery = 'INSERT INTO tickets (subject, message) VALUES (?, ?)';
+  db.query(insertQuery, [subject, message], (err, result) => {
+      if (err) {
+          console.error('Error creating ticket:', err);
+          return res.status(500).json({ error: 'An error occurred while creating the ticket' });
+      }
+      
+      return res.status(201).json({ reasponse: "200" , success: "true", message: 'Ticket created successfully', id: result.insertId });
+  });
+});
+
+
+
+// help center
+app.post('/query/answer', (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Please provide a message' });
+  }
+
+  const query = 'SELECT query_ans FROM tickets WHERE message = ?';
+  db.query(query, [message], (err, results) => {
+    if (err) {
+      console.error('Error retrieving answer:', err);
+      return res.status(500).json({ error: 'An error occurred while retrieving the answer' });
+    }
+    
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'No answer found for the message' });
+    }
+    
+    const query_ans = results[0].query_ans;
+    return res.status(200).json({  reasponse: "200" , success: "true", message: 'Answer retrieved successfully', query_ans });
+  });
+});
+
+
+
+// read notification
+const notification_id  = 11;
+app.patch('/notifications/read/:notification_id', (req, res) => {
+  const { notification_id } = req.params;
+
+  // Check if notificationId is provided
+  if (!notification_id) {
+      return res.status(400).json({ error: 'Please provide notification_id' });
+  }
+
+  // Update notification's read status in the database
+  const updateQuery = 'UPDATE notifications SET `read` = 0 WHERE id = ?';
+  db.query(updateQuery, [notification_id], (err, result) => {
+      if (err) {
+          console.error('Error updating notification:', err);
+          return res.status(500).json({ error: 'An error occurred while updating the notification' });
+      }
+
+      // Check if the notification was found and updated
+      if (result.affectedRows === 0) {
+          return res.status(404).json({ error: 'Notification not found' });
+      }
+
+      return res.status(200).json({ message: 'Notification marked as read successfully' });
+  });
+});
+
+
+
+// insert the patient
+app.post('/register/patient', (req, res) => {
+  const {
+      first_name,
+      last_name,
+      date_of_birth,
+      gender,
+      contact_number,
+      address,
+      admission_date,
+      discharge_date
+  } = req.body;
+
+  const insertQuery = `
+      INSERT INTO patient_info (
+          first_name,
+          last_name,
+          date_of_birth,
+          gender,
+          contact_number,
+          address,
+          admission_date,
+          discharge_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(
+      insertQuery,
+      [first_name, last_name, date_of_birth, gender, contact_number, address, admission_date, discharge_date],
+      (err, result) => {
+          if (err) {
+              console.error('Error inserting patient information:', err);
+              return res.status(500).json({ error: 'An error occurred while storing patient information' });
+          }
+
+          // Respond with the details of the inserted patient
+          const patient = {
+              id: result.insertId,
+              first_name,
+              last_name,
+              date_of_birth,
+              gender,
+              contact_number,
+              address,
+              admission_date,
+              discharge_date
+          };
+
+          return res.status(201).json(patient);
+      }
+  );
+});
+
+
+// update patient details
+app.put('/update-patient/:id', (req, res) => {
+  const id = req.params.id;
+  const {
+      first_name,
+      last_name,
+      date_of_birth,
+      gender,
+      contact_number,
+      address,
+      admission_date,
+      discharge_date,
+  } = req.body;
+
+  const updateQuery = `
+      UPDATE patient_info
+      SET
+          first_name = ?,
+          last_name = ?,
+          date_of_birth = ?,
+          gender = ?,
+          contact_number = ?,
+          address = ?,
+          admission_date = ?,
+          discharge_date = ?
+      WHERE id = ?
+  `;
+
+  db.query(
+      updateQuery,
+      [
+          first_name,
+          last_name,
+          date_of_birth,
+          gender,
+          contact_number,
+          address,
+          admission_date,
+          discharge_date,
+          id,
+
+      ],
+      (err, result) => {
+          if (err) {
+              console.error('Error updating patient:', err);
+              return res
+                  .status(500)
+                  .json({ error: 'An error occurred while updating the patient' });
+          }
+
+          if (result.affectedRows === 0) {
+              return res
+                  .status(404)
+                  .json({ error: 'Patient with the given ID not found' });
+          }
+
+          return res.json({ reasponse: "200" , success: "true", message: 'Patient updated successfully' });
+      }
+  );
+});
+
+// delete patient_details
+app.delete('/delete-patient/:id', (req, res) => {
+  const id = req.params.id;
+
+  const deleteQuery = `
+      DELETE FROM patient_info
+      WHERE id = ?
+  `;
+
+  db.query(deleteQuery, [id], (err, result) => {
+      if (err) {
+          console.error('Error deleting patient:', err);
+          return res
+              .status(500)
+              .json({ error: 'An error occurred while deleting the patient' });
+      }
+
+      if (result.affectedRows === 0) {
+          return res
+              .status(404)
+              .json({ error: 'Patient with the given ID not found' });
+      }
+
+      return res.json({reasponse: "200" , success: "true", message: 'Patient deleted successfully' });
+  });
+});
+
+
+// fetch patient details
+// Add this route after the delete API endpoint
+
+// Fetch API endpoint (retrieve patient information)
+app.get('/fetch-patient/:id', (req, res) => {
+  const id = req.params.id;
+
+  const fetchQuery = `
+      SELECT *
+      FROM patient_info
+      WHERE id = ?
+  `;
+
+  db.query(fetchQuery, [id], (err, result) => {
+      if (err) {
+          console.error('Error fetching patient information:', err);
+          return res
+              .status(500)
+              .json({ error: 'An error occurred while fetching patient information' });
+      }
+
+      if (result.length === 0) {
+          return res
+              .status(404)
+              .json({ error: 'Patient with the given ID not found' });
+      }
+
+      const patientInfo = result[0]; // Assuming patient_id is unique
+
+      return res.json({ patient: patientInfo });
+  });
+});
+
+
+// Define multer storage and file upload settings
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+require('dotenv').config();
+
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.API_KEY,
+  api_secret: process.env.API_SECRET,
+  secure: true,
+});
+
+app.post('/imageupload', upload.single('image'), async (req, res) => {
+  try {
+    const file = req.file; // Access the uploaded file from req.file
+
+    if (!file) {
+      return res.status(400).json({
+        responseCode: 400,
+        success: false,
+        responseMessage: 'No file uploaded',
+      });
+    }
+
+    // Convert the buffer to a base64 data URL
+    const base64String = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+
+    // Upload image to Cloudinary
+    const result = await cloudinary.uploader.upload(base64String, {
+      resource_type: 'auto',
+    });
+
+    const imageUrl = result.secure_url;
+
+    // Save the image URL to the MySQL database
+    try {
+      
+      return res.status(200).json({
+        responseCode: 200,
+        success: true,
+        url: imageUrl,
+        responseMessage: 'Image uploaded successfully',
+      });
+      // });
+    } catch (error) {
+      return res.status(500).json({
+        responseCode: 500,
+        success: false,
+        responseMessage: 'Error saving image URL to MySQL',
+        error: error.message,
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      responseCode: 500,
+      success: false,
+      responseMessage: 'Error processing image upload',
+      error: error.message,
+    });
+  }
+});
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.API_KEY,
+  api_secret: process.env.API_SECRET,
+  secure: true,
+});
+
+app.post('/videoupload', upload.single('video'), async (req, res) => {
+  try {
+    const file = req.file; // Access the uploaded file from req.file
+
+    if (!file) {
+      return res.status(400).json({
+        responseCode: 400,
+        success: false,
+        responseMessage: 'No file uploaded',
+      });
+    }
+
+    // Convert the buffer to a base64 data URL
+    const base64String = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+
+    // Upload video to Cloudinary
+    const result = await cloudinary.uploader.upload(base64String, {
+      resource_type: 'video',
+    });
+
+    const videoUrl = result.secure_url;
+
+    // Save the video URL to the MySQL database
+    try {
+      // Your MySQL database saving logic here
+      
+      return res.status(200).json({
+        responseCode: 200,
+        success: true,
+        url: videoUrl,
+        responseMessage: 'Video uploaded successfully',
+      });
+    } catch (error) {
+      return res.status(500).json({
+        responseCode: 500,
+        success: false,
+        responseMessage: 'Error saving video URL to MySQL',
+        error: error.message,
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      responseCode: 500,
+      success: false,
+      responseMessage: 'Error processing video upload',
+      error: error.message,
+    });
+  }
+});
+
+
+// book appointment
+const bookedAppointments = [];
+
+app.use(bodyParser.json());
+
+app.post('/api/book', (req, res) => {
+  try {
+    // Extract information from the request body
+    const { patient_name,email_address,contact_number,consultancy_fee,appointment_date,appointment_time } = req.body;
+
+    // Validate input fields (you may want to add more robust validation)
+    if (!patient_name || !email_address || !contact_number || !consultancy_fee || !appointment_date || !appointment_time) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const sql = 'INSERT INTO book_appoinment (patient_name,email_address,contact_number,consultancy_fee,appointment_date,appointment_time ) VALUES (?, ?, ?,?, ?, ?)';
+    // Use the correct variables in the db.query call
+    db.query(sql, [patient_name,email_address,contact_number,consultancy_fee,appointment_date,appointment_time ], (err, result) => {
+      if (err) {
+        console.error('Error inserting into database:', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+
+      // Save the booked appointment
+      const bookedAppointment = {
+        patient_name,
+        email_address,
+        contact_number,
+        consultancy_fee,
+        appointment_date,
+        appointment_time
+      };
+      // Note: You may want to save the appointment in the database as well, not just in-memory
+      bookedAppointments.push(bookedAppointment);
+
+      res.status(201).json({ message: ' booked appoinment successfully', bookedAppointment });
+    });
+  } catch (error) {
+    console.error('Error booking appoinment:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
+
+
+
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+
+
